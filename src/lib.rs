@@ -1,13 +1,35 @@
 use std::{iter, sync::Arc};
 
+use std::path::PathBuf;
+use image::ImageReader;
+use image::ImageFormat;
+
+
 
 use winit::{
     application::ApplicationHandler,
     event::*,
     event_loop::{ActiveEventLoop, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
-    window::Window
+    window::{Window, Icon}
 };
+
+
+fn load_icon_from_path(path: &PathBuf) -> anyhow::Result<Icon> {
+    let reader = ImageReader::open(path)?.with_guessed_format()?;
+    
+    let format = reader.format().ok_or_else(|| anyhow::anyhow!("Unknown image format"))?;
+    
+    if format == ImageFormat::Ico || format == ImageFormat::Png {
+        let image = reader.decode()?;
+        let rgba_image = image.into_rgba8();
+        let (width, height) = rgba_image.dimensions();
+        let icon = Icon::from_rgba(rgba_image.into_vec(), width, height)?;
+        Ok(icon)
+    } else {
+        anyhow::bail!("Unsupported icon format. Use .ico or .png.");
+    }
+}
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -181,6 +203,13 @@ impl ApplicationHandler<State> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         #[allow(unused_mut)]
         let mut window_attributes = Window::default_attributes().with_title("Game Window");
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Ok(icon) = load_icon_from_path(&PathBuf::from("src/icon.ico")) {
+            window_attributes = window_attributes.with_window_icon(Some(icon));
+        } else {
+            log::error!("Failed to load window icon.");
+        }
 
         #[cfg(target_arch = "wasm32")]
         {
